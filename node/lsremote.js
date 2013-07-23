@@ -63,7 +63,13 @@ function getlistftp(dir, recursive, callback) {
 }
 
 function getlisthttp(dir, recursive, callback) {
-
+	
+	// Increment counter for each call.
+	if (typeof(getlisthttp.files) === "undefined") {
+		getlisthttp.Nr = 1;
+	} else {
+		getlisthttp.Nr = getlisthttp.Nr+1;
+	}
 	request({uri: dir}, function(err, response, body) {
 		var self = this;
 		self.items = new Array();
@@ -73,30 +79,49 @@ function getlisthttp(dir, recursive, callback) {
 		// also tell jsdom to attach jQuery in the scripts and loaded from jQuery.com
 		jsdom.env({
 					html: body,
-					scripts: ['http://code.jquery.com/jquery.min.js']
-					},function (err, window) {
+					scripts: ['http://code.jquery.com/jquery.min.js'],
+					done: function (err, window) {
 					
-					// Use jQuery just as in a regular HTML page
-					var $ = window.jQuery;
-					var files = new Array();							
-					var f = 0;
-					
-					$('a').each(function () {
-						var tmp = $(this).attr('href');
-						if (!tmp.match(/^\?/)) { // Skip files that start with "?".
-							if (tmp.match(/\/$/)) {
-								files[f] = new Array();
-								files[f][0] = tmp;
-							} else {
-								files[f] = new Array();
-								files[f][0] = tmp;
-								files[f][1] = $($(this).parent().nextAll('td')[0]).text()
-								files[f][2] = $($(this).parent().nextAll('td')[1]).text()
-							}
-							f = f+1;							
-						}							
-					});
-					callback(files);						
+						// Use jQuery just as in a regular HTML page
+						var $ = window.jQuery;
+						if (typeof(getlisthttp.files) === "undefined") {
+							getlisthttp.files = [];
+							getlisthttp.dirs  = [];							
+							getlisthttp.f     = 0;
+							//var getlisthttp.d = 0;
+						}
+						var dirs = [];
+						var d = 0;
+						//console.log($('a'));
+						$('a').each(function () {
+							var href = $(this).attr('href');
+							var text = $(this).text();
+							//console.log(text);
+							if (!href.match(/^\?/) && !text.match("Parent Directory")) { // Skip parent directory link and files that start with "?".
+								if (href.match(/\/$/)) {
+									dirs[d] = dir + href;
+									console.log("Directory: " + dirs[d]);
+									if (recursive)
+										getlisthttp(dirs[d], recursive, callback);
+									d = d+1;
+								} else {
+									//files[f] = new Array();
+									//files[f][0] = tmp;
+									getlisthttp.files[getlisthttp.f] = dir + href;
+									console.log("File: " + getlisthttp.files[getlisthttp.f]);
+									//files[f][1] = $($(this).parent().nextAll('td')[0]).text()
+									//files[f][2] = $($(this).parent().nextAll('td')[1]).text()
+									getlisthttp.f = getlisthttp.f+1;							
+								}
+							}							
+						});	
+
+						getlisthttp.Nr = getlisthttp.Nr-1					
+						if (d == 0 && getlisthttp.Nr == 0) {
+							// No directories at this level and no pending requests.
+							callback(getlisthttp.files);
+						}	
+					}					
 				});				
 	});
 	
@@ -145,9 +170,11 @@ app.get('/lsremote.js', function(req, res){
 	//console.log(modifiers);
 	lsremote(dir, recursive, function (files) {
 		if (pattern !== "") { 
-			var patt = new RegExp(pattern,modifiers);
+			var patt = new RegExp(pattern, modifiers);
+			console.log(pattern);
+			console.log(files);
 			//console.log(files.filter(function (val) {return val.match(patt,modifiers)}));
-			res.send(files.filter(function (val) {return val.match(patt,modifiers)}));
+			res.send(files.filter(function (val) {return val.match(patt, modifiers)}));
 		} else {	
 			console.log(files);
 			res.send(files);
