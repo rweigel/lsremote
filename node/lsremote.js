@@ -158,6 +158,9 @@ app.get('/lsremote.js', function(req, res){
 	var dir       = req.query.dir 			|| "";
 	var recursive = s2b(req.query.recursive) || false;
 	
+	if (dir === "") {
+		res.send("A directory must be specified");
+	}
 	if (dir.match(/^file|^\//)) {
 		if (!(req.connection.remoteAddress === req.connection.address().address)) {
 			var msg = "Listing of server filesystem directory is only allowed if client IP (" + req.connection.remoteAddress + ") = server IP ("+req.connection.address().address+")";
