@@ -31,7 +31,7 @@ function lsremote(dir, recursive, callback) {
 	}	
 }
 
-function getlistother(dir, callback) {
+function getlistother(dir, recurursive, callback) {
 	callback("Protocol " + dir.replace(/(.*)\:.*/,'$1') + " not supported.");
 }
 
