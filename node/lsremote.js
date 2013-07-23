@@ -19,13 +19,13 @@ if (!isNumeric(port)) {
 	return;
 }
 		
-function lsremote(dir, recursive, callback) {
+function lsremote(dir, recursive, job, callback) {
 	if (dir.match(/^file|^\//)) {
 		getlistlocal(dir, recursive, callback);
 	} else if (dir.match(/^ftp[s]?/)) {
 		getlistftp(dir, recursive, callback);
 	} else if (dir.match(/^http[s]?/)) {
-		getlisthttp(dir, recursive, callback);
+		getlisthttp(dir, recursive, job, callback);
 	} else {
 		getlistother(dir, recursive, callback);		
 	}	
@@ -62,16 +62,24 @@ function getlistftp(dir, recursive, callback) {
 				});
 }
 
-function getlisthttp(dir, recursive, callback) {
+function getlisthttp(dir, recursive, job, callback) {
+
+	if (typeof(getlisthttp.work) === "undefined") {
+		getlisthttp.work = [];
+	}	
 	
 	// Increment counter for each call.
-	if (typeof(getlisthttp.files) === "undefined") {
-		getlisthttp.Nr = 1;
+	if (typeof(getlisthttp.work[job]) === "undefined") {		
+		getlisthttp.work[job]       = {};
+		getlisthttp.work[job].Nr    = 1;   // Number of dirs left to process.
+		getlisthttp.work[job].files = [];  // Array of file names.
+		getlisthttp.work[job].dirs  = [];							
+		getlisthttp.work[job].f     = 0; // Number of files found.		
 	} else {
-		getlisthttp.Nr = getlisthttp.Nr+1;
+		getlisthttp.work[job].Nr = getlisthttp.work[job].Nr+1;
 	}
 	request({uri: dir}, function(err, response, body) {
-		var self = this;
+		var self   = this;
 		self.items = new Array();
 		if (err && response.statusCode !== 200) {console.log('Request error.');}
 
@@ -84,12 +92,7 @@ function getlisthttp(dir, recursive, callback) {
 					
 						// Use jQuery just as in a regular HTML page
 						var $ = window.jQuery;
-						if (typeof(getlisthttp.files) === "undefined") {
-							getlisthttp.files = [];
-							getlisthttp.dirs  = [];							
-							getlisthttp.f     = 0;
-							//var getlisthttp.d = 0;
-						}
+
 						var dirs = [];
 						var d = 0;
 						//console.log($('a'));
@@ -97,29 +100,30 @@ function getlisthttp(dir, recursive, callback) {
 							var href = $(this).attr('href');
 							var text = $(this).text();
 							//console.log(text);
-							if (!href.match(/^\?/) && !text.match("Parent Directory")) { // Skip parent directory link and files that start with "?".
+ 							// Skip parent directory link and files that start with "?".
+							if (!href.match(/^\?/) && !text.match("Parent Directory")) {
 								if (href.match(/\/$/)) {
 									dirs[d] = dir + href;
 									console.log("Directory: " + dirs[d]);
 									if (recursive)
-										getlisthttp(dirs[d], recursive, callback);
+										getlisthttp(dirs[d], recursive, job, callback);
 									d = d+1;
 								} else {
 									//files[f] = new Array();
 									//files[f][0] = tmp;
-									getlisthttp.files[getlisthttp.f] = dir + href;
-									console.log("File: " + getlisthttp.files[getlisthttp.f]);
+									getlisthttp.work[job].files[getlisthttp.work[job].f] = dir + href;
+									console.log("File: " + getlisthttp.work[job].files[getlisthttp.work[job].f]);
 									//files[f][1] = $($(this).parent().nextAll('td')[0]).text()
 									//files[f][2] = $($(this).parent().nextAll('td')[1]).text()
-									getlisthttp.f = getlisthttp.f+1;							
+									getlisthttp.work[job].f = getlisthttp.work[job].f+1;							
 								}
 							}							
 						});	
 
-						getlisthttp.Nr = getlisthttp.Nr-1					
-						if (d == 0 && getlisthttp.Nr == 0) {
+						getlisthttp.work[job].Nr = getlisthttp.work[job].Nr-1					
+						if (d == 0 && getlisthttp.work[job].Nr == 0) {
 							// No directories at this level and no pending requests.
-							callback(getlisthttp.files);
+							callback(getlisthttp.work[job].files);
 						}	
 					}					
 				});				
@@ -147,6 +151,7 @@ app.use(express.bodyParser());
 app.use("/deps", express.static(__dirname + "/deps"));
 app.use(function (req, res, next) {res.contentType("text");next();});
 
+var job = 0;
 app.get('/lsremote.js', function(req, res){
 	res.contentType("html");
 	
@@ -171,15 +176,18 @@ app.get('/lsremote.js', function(req, res){
 	}
 	//console.log(pattern);
 	//console.log(modifiers);
-	lsremote(dir, recursive, function (files) {
+	lsremote(dir, recursive, job, function (files) {
 		if (pattern !== "") { 
 			var patt = new RegExp(pattern, modifiers);
 			console.log(pattern);
-			console.log(files);
+			console.log(dir);
+			//console.log(files);
 			//console.log(files.filter(function (val) {return val.match(patt,modifiers)}));
 			res.send(files.filter(function (val) {return val.match(patt, modifiers)}));
+			delete getlisthttp.work[job];
+			job = job+1;
 		} else {	
-			console.log(files);
+			//console.log(files);
 			res.send(files);
 		}
 		
