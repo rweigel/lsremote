@@ -6,6 +6,7 @@ var server  = require("http").createServer(app);
 var fs      = require("fs");
 var ftp     = require('jsftp');
 var jsdom   = require("jsdom");
+var crypto  = require("crypto");
 	
 // get port number from command line option
 var port = process.argv[2] || 8001;
@@ -152,6 +153,7 @@ app.use("/deps", express.static(__dirname + "/deps"));
 app.use(function (req, res, next) {res.contentType("text");next();});
 
 var job = 0;
+var cache = {};
 app.get('/lsremote.js', function(req, res){
 	res.contentType("html");
 	
@@ -162,7 +164,20 @@ app.get('/lsremote.js', function(req, res){
 	var modifiers = req.query.modifiers 		|| "";	
 	var dir       = req.query.dir 			|| "";
 	var recursive = s2b(req.query.recursive) || false;
+	var forceUpdate = s2b(req.query.forceUpdate) || false;
 	
+	var reqmd5 = crypto.createHash("md5").update(dir+pattern+modifiers+recursive).digest("hex");
+	
+	if (!forceUpdate && cache[reqmd5]) {
+		res.send(cache[reqmd5]);
+		// Only cache 100 responses.
+		// TODO: Remove oldest first.  Constrain cache based on memory, not length.
+		if (Object.keys(cache).length > 100) {
+			console.log("Trimming cache");
+			delete cache[Object.keys(cache)[0]];
+		}
+		return;
+	}
 	if (dir === "") {
 		res.send("A directory must be specified");
 	}
@@ -183,7 +198,8 @@ app.get('/lsremote.js', function(req, res){
 			console.log(dir);
 			//console.log(files);
 			//console.log(files.filter(function (val) {return val.match(patt,modifiers)}));
-			res.send(files.filter(function (val) {return val.match(patt, modifiers)}));
+			cache[reqmd5] = files.filter(function (val) {return val.match(patt, modifiers)});
+			res.send(cache[reqmd5]);
 			delete getlisthttp.work[job];
 			job = job+1;
 		} else {	
