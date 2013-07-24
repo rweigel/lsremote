@@ -7,7 +7,9 @@ var fs      = require("fs");
 var ftp     = require('jsftp');
 var jsdom   = require("jsdom");
 var crypto  = require("crypto");
-	
+
+var maxCache = 100; // Max number of responses to cache.
+
 // get port number from command line option
 var port = process.argv[2] || 8001;
 
@@ -172,7 +174,7 @@ app.get('/lsremote.js', function(req, res){
 		res.send(cache[reqmd5]);
 		// Only cache 100 responses.
 		// TODO: Remove oldest first.  Constrain cache based on memory, not length.
-		if (Object.keys(cache).length > 100) {
+		if (Object.keys(cache).length > maxCache) {
 			console.log("Trimming cache");
 			delete cache[Object.keys(cache)[0]];
 		}
