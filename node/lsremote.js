@@ -154,7 +154,7 @@ app.use(express.bodyParser());
 app.use("/deps", express.static(__dirname + "/deps"));
 app.use(function (req, res, next) {res.contentType("text");next();});
 
-var job = 0;
+//var job = 0;
 var cache = {};
 app.get('/lsremote.js', function(req, res){
 	res.contentType("html");
@@ -162,10 +162,10 @@ app.get('/lsremote.js', function(req, res){
 	function s2b(str) {if (str === "true") {return true} else {return false}}
 	function s2i(str) {return parseInt(str)}
 	
-	var pattern   = req.query.pattern 		|| "";
-	var modifiers = req.query.modifiers 		|| "";	
-	var dir       = req.query.dir 			|| "";
-	var recursive = s2b(req.query.recursive) || false;
+	var pattern     = req.query.pattern 		    || "";
+	var modifiers   = req.query.modifiers 		|| "";	
+	var dir         = req.query.dir 			    || "";
+	var recursive   = s2b(req.query.recursive)   || false;
 	var forceUpdate = s2b(req.query.forceUpdate) || false;
 	
 	var reqmd5 = crypto.createHash("md5").update(dir+pattern+modifiers+recursive).digest("hex");
@@ -193,7 +193,9 @@ app.get('/lsremote.js', function(req, res){
 	}
 	//console.log(pattern);
 	//console.log(modifiers);
-	lsremote(dir, recursive, job, function (files) {
+
+//	lsremote(dir, recursive, job, function (files) {	
+	lsremote(dir, recursive, reqmd5, function (files) {
 		if (pattern !== "") { 
 			var patt = new RegExp(pattern, modifiers);
 			console.log(pattern);
@@ -202,10 +204,10 @@ app.get('/lsremote.js', function(req, res){
 			//console.log(files.filter(function (val) {return val.match(patt,modifiers)}));
 			cache[reqmd5] = files.filter(function (val) {return val.match(patt, modifiers)});
 			res.send(cache[reqmd5]);
-			delete getlisthttp.work[job];
-			job = job+1;
+			delete getlisthttp.work[reqmd5];
+			//delete getlisthttp.work[job];
+			//job = job+1;
 		} else {	
-			//console.log(files);
 			res.send(files);
 		}
 		
