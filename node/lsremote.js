@@ -162,11 +162,11 @@ app.get('/lsremote.js', function(req, res){
 	function s2b(str) {if (str === "true") {return true} else {return false}}
 	function s2i(str) {return parseInt(str)}
 	
-	var pattern     = req.query.pattern 		    || "";
-	var modifiers   = req.query.modifiers 		|| "";	
-	var dir         = req.query.dir 			    || "";
-	var recursive   = s2b(req.query.recursive)   || false;
-	var forceUpdate = s2b(req.query.forceUpdate) || false;
+	var pattern     = req.query.pattern			|| "";
+	var modifiers   = req.query.modifiers		|| "";	
+	var dir         = req.query.dir				|| "";
+	var recursive   = s2b(req.query.recursive)	|| false;
+	var forceUpdate = s2b(req.query.forceUpdate)	|| false;
 	
 	var reqmd5 = crypto.createHash("md5").update(dir+pattern+modifiers+recursive).digest("hex");
 	
