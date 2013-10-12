@@ -1,2 +1,4 @@
+See http://lsremote.info/
+
 node node/lsremote.js 8001
 http://localhost:8001/lsremote.js?pattern=PATTERN&recursive={true,false}&dir=PATH
