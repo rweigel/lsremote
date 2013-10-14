@@ -7,7 +7,7 @@
 		"jsftp"   : "*",
 		"cherrio" : "*",
 		"findit"  : "0.1.2",
-		"url"     : "*",
+		"url"     : "*"
 	},
 	"scripts": {
     "test": "bash test.sh"
