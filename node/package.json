@@ -8,5 +8,8 @@
 		"cherrio" : "*",
 		"findit"  : "0.1.2",
 		"url"     : "*",
-	}
+	},
+	"scripts": {
+    "test": "bash test.sh"
+  },
 }
