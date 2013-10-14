@@ -5,7 +5,7 @@
 		"request" : "2.9.203",
 		"express" : "3.0.0beta7",
 		"jsftp"   : "*",
-		"cherrio" : "*",
+		"cheerio" : "*",
 		"findit"  : "0.1.2",
 		"url"     : "*"
 	},
