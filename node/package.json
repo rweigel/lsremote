@@ -1,11 +1,12 @@
 {
 	"name": "lsremote",
-  	"version": "0.1.0",
+  	"version": "0.2.0",
 	"dependencies": {
 		"request" : "2.9.203",
 		"express" : "3.0.0beta7",
 		"jsftp"   : "*",
-		"jsdom"   : "*",
-		"findit"  : "0.1.2"
+		"cherrio" : "*",
+		"findit"  : "0.1.2",
+		"url"     : "*",
 	}
 }

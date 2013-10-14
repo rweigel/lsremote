@@ -5,13 +5,17 @@ var app     = express();
 var server  = require("http").createServer(app);
 var fs      = require("fs");
 var ftp     = require('jsftp');
-var jsdom   = require("jsdom");
 var crypto  = require("crypto");
+var cheerio = require('cheerio');
+var http    = require("http");
+var https   = require("https");
+var url     = require('url');
 
-var maxCache = 100; // Max number of responses to cache.
+var maxCache = 1000; // Max number of responses to cache.
+var debug    = false;
 
 // get port number from command line option
-var port = process.argv[2] || 8001;
+var port = process.argv[2] || 8005;
 
 function isNumeric(num){return !isNaN(num)}
 
@@ -51,18 +55,10 @@ function getlistftp(dir, recursive, callback) {
 	}
 	console.log("Attempting anonymous ftp directory listing at " + host + " on port " + port + " in path " + path);
 
-	var ftpconn = new ftp({
-							host: host,
-							user: "anonymous",
-							port: port,
-							pass: ""
-						});
+	var ftpconn = new ftp({host: host, user: "anonymous", port: port, pass: ""});
 
-	ftpconn.ls(path,
-					function(err, tmp) {
-						if (err) return console.error(err);
-						callback(tmp);
-				});
+	ftpconn.ls(path, function(err, tmp) {if (err) return console.error(err);callback(tmp)});
+
 }
 
 function getlisthttp(dir, recursive, job, callback) {
@@ -81,55 +77,49 @@ function getlisthttp(dir, recursive, job, callback) {
 	} else {
 		getlisthttp.work[job].Nr = getlisthttp.work[job].Nr+1;
 	}
+	
 	request({uri: dir}, function(err, response, body) {
 		var self   = this;
 		self.items = new Array();
-		if (err && response.statusCode !== 200) {console.log('Request error.');}
+		if (err || response.statusCode !== 200) {
+			console.log('Request error.');
+			res.send(500);
+			return;
+		}
+		console.log("Received response from " + dir);
 
-		// Send the body param as the HTML code we will parse in jsdom
-		// also tell jsdom to attach jQuery in the scripts and loaded from jQuery.com
-		jsdom.env({
-					html: body,
-					scripts: ['http://code.jquery.com/jquery.min.js'],
-					done: function (err, window) {
-					
-						// Use jQuery just as in a regular HTML page
-						var $ = window.jQuery;
+		$ = cheerio.load(body);
+		
+		var dirs = [];
+		var d = 0;
+						
+		$('a').each(function () {
+			var href = $(this).attr('href');
+			var text = $(this).text();
+			if (typeof(href) === "undefined") return;
+			if (typeof(text) === "undefined") text="";
 
-						var dirs = [];
-						var d = 0;
-						//console.log($('a'));
-						$('a').each(function () {
-							var href = $(this).attr('href');
-							var text = $(this).text();
-							//console.log(text);
- 							// Skip parent directory link and files that start with "?".
-							if (!href.match(/^\?/) && !text.match("Parent Directory")) {
-								if (href.match(/\/$/)) {
-									dirs[d] = dir + href;
-									console.log("Directory: " + dirs[d]);
-									if (recursive)
-										getlisthttp(dirs[d], recursive, job, callback);
-									d = d+1;
-								} else {
-									//files[f] = new Array();
-									//files[f][0] = tmp;
-									getlisthttp.work[job].files[getlisthttp.work[job].f] = dir + href;
-									console.log("File: " + getlisthttp.work[job].files[getlisthttp.work[job].f]);
-									//files[f][1] = $($(this).parent().nextAll('td')[0]).text()
-									//files[f][2] = $($(this).parent().nextAll('td')[1]).text()
-									getlisthttp.work[job].f = getlisthttp.work[job].f+1;							
-								}
-							}							
-						});	
+ 			// Skip parent directory link and files that start with "?".
+			if (!href.match(/^\?/) && !text.match("Parent Directory")) {
+					if (href.match(/\/$/)) {
+						dirs[d] = dir + href;
+						if (debug) console.log("Directory: " + dirs[d]);
+						if (recursive) getlisthttp(dirs[d], recursive, job, callback);
+						d = d+1;
+					} else {
+						getlisthttp.work[job].files[getlisthttp.work[job].f] = dir + href;
+						getlisthttp.work[job].f = getlisthttp.work[job].f+1;							
+					}
+				}							
+			});				
+			getlisthttp.work[job].Nr = getlisthttp.work[job].Nr-1					
+			if (d == 0 && getlisthttp.work[job].Nr == 0) {
+				// No directories at this level and no pending requests.
+				callback(getlisthttp.work[job].files);
+			}
+			
+			if (!recursive) callback([])	
 
-						getlisthttp.work[job].Nr = getlisthttp.work[job].Nr-1					
-						if (d == 0 && getlisthttp.work[job].Nr == 0) {
-							// No directories at this level and no pending requests.
-							callback(getlisthttp.work[job].files);
-						}	
-					}					
-				});				
 	});
 	
 }
@@ -154,6 +144,10 @@ app.use(express.bodyParser());
 app.use("/deps", express.static(__dirname + "/deps"));
 app.use(function (req, res, next) {res.contentType("text");next();});
 
+app.get('/', function(req, res){
+	res.redirect(301,"http://lsremote.info/");
+})
+
 //var job = 0;
 var cache = {};
 app.get('/lsremote.js', function(req, res){
@@ -167,22 +161,52 @@ app.get('/lsremote.js', function(req, res){
 	var dir         = req.query.dir				|| "";
 	var recursive   = s2b(req.query.recursive)	|| false;
 	var forceUpdate = s2b(req.query.forceUpdate)	|| false;
+	console.log("Request: " + req.originalUrl);
 	
+	if (false) {
+		// Check last-modified header.
+		// Generally this is not sent by apache, so skip.
+		var urlparts = url.parse(dir);
+		if (dir.match(/^http[s]?/)) {
+			var options = {method: 'HEAD', host: urlparts.hostname, port: 80, path: urlparts.pathname};
+			var req = http.request(options, function(res) {
+		    		console.log(JSON.stringify(res.headers['last-modified']));
+		  	});
+			req.end();
+		}
+	}
+	
+	// TODO: Store md5(dir) and md5(dir+pattern+modifiers+recursive)
+	//       If md5(dir) exists, use it.
 	var reqmd5 = crypto.createHash("md5").update(dir+pattern+modifiers+recursive).digest("hex");
-	
+
+	if (!forceUpdate && !cache[reqmd5]) {
+		var fname = __dirname + "/cache/" + reqmd5 + ".json";
+		if (fs.existsSync(fname)) {
+			if (debug) console.log("Sending result from file cache.");
+			var data = fs.readFileSync(fname);
+			res.send(data);
+			if (debug) console.log("Placing result in memory cache.");
+			cache[reqmd5] = JSON.parse(data);
+			return;
+		}
+	}
+		
 	if (!forceUpdate && cache[reqmd5]) {
+		if (debug) console.log("Sending result from memory cache.");
 		res.send(cache[reqmd5]);
-		// Only cache 100 responses.
 		// TODO: Remove oldest first.  Constrain cache based on memory, not length.
 		if (Object.keys(cache).length > maxCache) {
-			console.log("Trimming cache");
+			if (debug) console.log("Trimming in-memory cache.");
 			delete cache[Object.keys(cache)[0]];
 		}
 		return;
 	}
+	
 	if (dir === "") {
 		res.send("A directory must be specified");
 	}
+	
 	if (dir.match(/^file|^\//)) {
 		if (!(req.connection.remoteAddress === req.connection.address().address)) {
 			var msg = "Listing of server filesystem directory is only allowed if client IP (" + req.connection.remoteAddress + ") = server IP ("+req.connection.address().address+")";
@@ -191,25 +215,20 @@ app.get('/lsremote.js', function(req, res){
 			return;
 		}	
 	}
-	//console.log(pattern);
-	//console.log(modifiers);
 
-//	lsremote(dir, recursive, job, function (files) {	
 	lsremote(dir, recursive, reqmd5, function (files) {
 		if (pattern !== "") { 
 			var patt = new RegExp(pattern, modifiers);
-			console.log(pattern);
-			console.log(dir);
+			if (debug) console.log(pattern);
+			if (debug) console.log(dir);
 			//console.log(files);
 			//console.log(files.filter(function (val) {return val.match(patt,modifiers)}));
 			cache[reqmd5] = files.filter(function (val) {return val.match(patt, modifiers)});
-			res.send(cache[reqmd5]);
-			delete getlisthttp.work[reqmd5];
-			//delete getlisthttp.work[job];
-			//job = job+1;
 		} else {	
-			res.send(files);
+			cache[reqmd5] = files;
 		}
+		res.send(cache[reqmd5]);
+		fs.writeFileSync(__dirname + "/cache/" + reqmd5 + ".json", JSON.stringify(files));
 		
 	});	
 });
