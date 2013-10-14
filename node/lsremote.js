@@ -19,6 +19,8 @@ var port = process.argv[2] || 8005;
 
 function isNumeric(num){return !isNaN(num)}
 
+fs.mkdirSync(__dirname+"/cache");
+
 // Command line mode.
 if (!isNumeric(port)) {
 	dir = port;
