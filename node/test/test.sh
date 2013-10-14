@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-mkdir tmp
+mkdir test/tmp
 
 status=0
 curl -g -s "http://localhost:8005/lsremote.js?recursive=true&dir=http://virbo.org/images/pngwalk/ACE/Multi/" | sort > test/tmp/test.0
