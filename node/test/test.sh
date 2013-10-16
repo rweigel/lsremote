@@ -12,7 +12,7 @@ if [ "$a" != "$b" ]; then
 	status=1
 	echo "Test 0 failed"
 fi
-
+ls -l
 curl -g -s "http://localhost:8005/lsremote.js?recursive=true&dir=http://virbo.org/images/pngwalk/ACE/Multi/" | sort > test/tmp/test.1
 a=`ls -l test/tmp/test.1 | cut -d' ' -f8`
 b=`ls -l test/data/test.1 | cut -d' ' -f8`
