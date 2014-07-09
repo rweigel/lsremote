@@ -12,14 +12,16 @@ var https   = require("https");
 var url     = require('url');
 
 var maxCache = 1000; // Max number of responses to cache.
-var debug    = false;
 
 // get port number from command line option
-var port = process.argv[2] || 8005;
+var port = process.argv[2] || 8001;
+var debug = process.argv[3] || false;
 
-function isNumeric(num){return !isNaN(num)}
+function isNumeric(num){return !isNaN(num);}
 
-fs.mkdirSync(__dirname+"/cache");
+if (!fs.existsSync(__dirname+"/cache")) {
+	fs.mkdirSync(__dirname+"/cache");
+}
 
 // Command line mode.
 if (!isNumeric(port)) {
@@ -85,7 +87,8 @@ function getlisthttp(dir, recursive, job, callback) {
 		self.items = new Array();
 		if (err || response.statusCode !== 200) {
 			console.log('Request error.');
-			res.send(500);
+			console.log(err);
+			callback(500);
 			return;
 		}
 		console.log("Received response from " + dir);
@@ -120,7 +123,7 @@ function getlisthttp(dir, recursive, job, callback) {
 				callback(getlisthttp.work[job].files);
 			}
 			
-			if (!recursive) callback([])	
+			//if (!recursive) callback([])	
 
 	});
 	
@@ -161,8 +164,9 @@ app.get('/lsremote.js', function(req, res){
 	var pattern     = req.query.pattern			|| "";
 	var modifiers   = req.query.modifiers		|| "";	
 	var dir         = req.query.dir				|| "";
-	var recursive   = s2b(req.query.recursive)	|| false;
-	var forceUpdate = s2b(req.query.forceUpdate)	|| false;
+	var maxage      = s2i(req.query.maxage		|| "3600");
+	var recursive   = s2b(req.query.recursive	|| "false");
+	var forceUpdate = s2b(req.query.forceUpdate	|| "false");
 	console.log("Request: " + req.originalUrl);
 	
 	if (false) {
@@ -180,14 +184,33 @@ app.get('/lsremote.js', function(req, res){
 	
 	// TODO: Store md5(dir) and md5(dir+pattern+modifiers+recursive)
 	//       If md5(dir) exists, use it.
-	var reqmd5 = crypto.createHash("md5").update(dir+pattern+modifiers+recursive).digest("hex");
+	var reqmd5 = crypto.createHash("md5").update(dir+recursive).digest("hex");
+
+	var fname = __dirname + "/cache/" + reqmd5 + ".json";
+	console.log(fname);
+	if (fs.existsSync(fname)) {
+		var stats = fs.lstatSync(fname);
+		t0 = new Date(stats.mtime).getTime();
+		tn = new Date().getTime();
+		if (tn-t0 > 1000*maxage) {
+			//console.log(tn-t0);
+			//console.log(1000*maxage);
+			//console.log("Cache expired");
+			delete cache[reqmd5];
+			fs.unlinkSync(fname);
+		}
+	}
 
 	if (!forceUpdate && !cache[reqmd5]) {
-		var fname = __dirname + "/cache/" + reqmd5 + ".json";
+		
 		if (fs.existsSync(fname)) {
 			if (debug) console.log("Sending result from file cache.");
 			var data = fs.readFileSync(fname);
-			res.send(data);
+			if (pattern !== "") { 
+				res.send(JSON.parse(data).filter(function (val) {return val.match(new RegExp(pattern, modifiers), modifiers)}));
+			} else {	
+				res.send(JSON.parse(data));
+			}
 			if (debug) console.log("Placing result in memory cache.");
 			cache[reqmd5] = JSON.parse(data);
 			return;
@@ -196,7 +219,12 @@ app.get('/lsremote.js', function(req, res){
 		
 	if (!forceUpdate && cache[reqmd5]) {
 		if (debug) console.log("Sending result from memory cache.");
-		res.send(cache[reqmd5]);
+		if (pattern !== "") { 
+			res.send(cache[reqmd5].filter(function (val) {return val.match(new RegExp(pattern, modifiers), modifiers)}));
+		} else {	
+			res.send(cache[reqmd5]);
+		}
+		
 		// TODO: Remove oldest first.  Constrain cache based on memory, not length.
 		if (Object.keys(cache).length > maxCache) {
 			if (debug) console.log("Trimming in-memory cache.");
@@ -207,6 +235,7 @@ app.get('/lsremote.js', function(req, res){
 	
 	if (dir === "") {
 		res.send("A directory must be specified");
+		return;
 	}
 	
 	if (dir.match(/^file|^\//)) {
@@ -218,18 +247,18 @@ app.get('/lsremote.js', function(req, res){
 		}	
 	}
 
-	lsremote(dir, recursive, reqmd5, function (files) {
+	lsremote(dir, recursive, reqmd5, function (files,err) {
+		if (files == 500) {
+ 			res.send(500,err);
+ 			return;
+ 		}
+		if (debug) console.log("Sending response.");
 		if (pattern !== "") { 
-			var patt = new RegExp(pattern, modifiers);
-			if (debug) console.log(pattern);
-			if (debug) console.log(dir);
-			//console.log(files);
-			//console.log(files.filter(function (val) {return val.match(patt,modifiers)}));
-			cache[reqmd5] = files.filter(function (val) {return val.match(patt, modifiers)});
+			res.send(files.filter(function (val) {return val.match(new RegExp(pattern, modifiers), modifiers)}));
 		} else {	
-			cache[reqmd5] = files;
+			res.send(files);
 		}
-		res.send(cache[reqmd5]);
+		if (debug) console.log("Writing file cache.");
 		fs.writeFileSync(__dirname + "/cache/" + reqmd5 + ".json", JSON.stringify(files));
 		
 	});	
